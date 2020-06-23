@@ -1,0 +1,131 @@
+service: myservice
+#app: your-app-name
+#org: your-org-name
+
+frameworkVersion: '>=1.28.0 <2.0.0'
+
+provider:
+  name: aws
+  runtime: go1.x
+  stage: dev
+  region: ${env:AWS_REGION, 'ap-southeast-1'}
+  profile: melvinczl
+
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action:
+        - "s3:Put*"
+        - "s3:Get*"
+        - "s3:ListBucket"
+      Resource:
+        Fn::Join:
+          - ""
+          - - "arn:aws:s3:::"
+            - "Ref" : "ServerlessDeploymentBucket"
+            - "/*"
+    - Effect: "Allow"
+      Action:
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem 
+      Resource:
+        - arn:aws:dynamodb:*:*:table/${self:custom.orderTableName}*
+
+  environment:
+    ORDER_TABLE: ${self:custom.orderTableName}
+
+package:
+  exclude:
+    - ./**
+  include:
+    - ./bin/**
+
+functions:
+  createOrder:
+    handler: bin/createOrder
+    events:
+      - http:
+          path: order
+          method: post
+  getOrder:
+    handler: bin/getOrder
+    events:
+      - http:
+          path: order
+          method: get
+      - http:
+          path: order/{id}
+          method: get
+  updateOrder:
+    handler: bin/updateOrder
+    events:
+      - http:
+          path: order/{id}
+          method: patch
+  
+#    The following are a few example events you can configure
+#    NOTE: Please make sure to change your handler code to work with those events
+#    Check the event documentation for details
+# events:
+#    events:
+#      - http:
+#          path: users/create
+#          method: get
+#      - websocket: $connect
+#      - s3: ${env:BUCKET}
+#      - schedule: rate(10 minutes)
+#      - sns: greeter-topic
+#      - stream: arn:aws:dynamodb:region:XXXXXX:table/foo/stream/1970-01-01T00:00:00.000
+#      - alexaSkill: amzn1.ask.skill.xx-xx-xx-xx
+#      - alexaSmartHome: amzn1.ask.skill.xx-xx-xx-xx
+#      - iot:
+#          sql: "SELECT * FROM 'some_topic'"
+#      - cloudwatchEvent:
+#          event:
+#            source:
+#              - "aws.ec2"
+#            detail-type:
+#              - "EC2 Instance State-change Notification"
+#            detail:
+#              state:
+#                - pending
+#      - cloudwatchLog: '/aws/lambda/hello'
+#      - cognitoUserPool:
+#          pool: MyUserPool
+#          trigger: PreSignUp
+#      - alb:
+#          listenerArn: arn:aws:elasticloadbalancing:us-east-1:XXXXXX:listener/app/my-load-balancer/50dc6c495c0c9188/
+#          priority: 1
+#          conditions:
+#            host: example.com
+#            path: /hello
+
+#    Define function environment variables here
+#    environment:
+#      variable2: value2
+
+resources:
+  Resources:
+    OrderTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.orderTableName}
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+
+  # Outputs:
+  #   NewOutput:
+  #     Description: "Description for the output"
+  #     Value: "Some output value"
+
+custom:
+  orderTableName: ${self:service}-${self:provider.stage}-order
