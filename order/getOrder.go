@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/melvinczl/setel-orderPayment-backend/common"
 )
+
+type Response events.APIGatewayProxyResponse
+type Request events.APIGatewayProxyRequest
+type Order common.Order
 
 var ddb *dynamodb.DynamoDB
 
@@ -28,22 +34,22 @@ func init() {
 	}
 }
 
-func Handler(ctx context.Context, request Request) (Response, error) {
+func Handler(ctx context.Context, request Request) (events.APIGatewayProxyResponse, error) {
 	fmt.Println("GetOrder")
 
 	var orderId = request.PathParameters["id"]
 
 	orders, err := fetchOrder(orderId)
 	if err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
 	body, err := json.Marshal(&orders)
 	if err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
-	return Response{
+	return events.APIGatewayProxyResponse{
 		Body:       string(body),
 		StatusCode: 200,
 	}, nil

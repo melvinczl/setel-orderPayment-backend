@@ -6,13 +6,20 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/google/uuid"
+	"github.com/melvinczl/setel-orderPayment-backend/common"
 )
+
+type Response events.APIGatewayProxyResponse
+type Request events.APIGatewayProxyRequest
+type Order common.Order
+type OrderRequest common.OrderRequest
 
 var ddb *dynamodb.DynamoDB
 
@@ -30,7 +37,7 @@ func init() {
 }
 
 // Handler is our lambda handler invoked by the `lambda.Start` function call
-func Handler(ctx context.Context, request Request) (Response, error) {
+func Handler(ctx context.Context, request Request) (events.APIGatewayProxyResponse, error) {
 	fmt.Println("Received body: ", request.Body)
 	var (
 		req OrderRequest
@@ -38,12 +45,12 @@ func Handler(ctx context.Context, request Request) (Response, error) {
 	)
 
 	if err := json.Unmarshal([]byte(request.Body), &req); err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
-	created, err := Created.String()
+	created, err := common.Created.String()
 	if err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
 	order := &Order{
@@ -54,15 +61,15 @@ func Handler(ctx context.Context, request Request) (Response, error) {
 	}
 
 	if err := addOrder(order); err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
 	body, err := json.Marshal(order)
 	if err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
-	return Response{
+	return events.APIGatewayProxyResponse{
 		Body:       string(body),
 		StatusCode: 200,
 	}, nil

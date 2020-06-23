@@ -2,9 +2,9 @@
 
 build:
 	dep ensure -v
-	env GOOS=linux go build -ldflags="-s -w" -o bin/createOrder order/common.go order/createOrder.go
-	env GOOS=linux go build -ldflags="-s -w" -o bin/getOrder order/common.go order/getOrder.go
-	env GOOS=linux go build -ldflags="-s -w" -o bin/updateOrder order/common.go order/updateOrder.go
+	env GOOS=linux go build -ldflags="-s -w" -o bin/createOrder order/createOrder.go
+	env GOOS=linux go build -ldflags="-s -w" -o bin/getOrder order/getOrder.go
+	env GOOS=linux go build -ldflags="-s -w" -o bin/updateOrder order/updateOrder.go
 
 clean:
 	rm -rf ./bin ./vendor Gopkg.lock

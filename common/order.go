@@ -1,13 +1,9 @@
-package main
+package common
 
 import (
 	"errors"
-
-	"github.com/aws/aws-lambda-go/events"
 )
 
-type Response events.APIGatewayProxyResponse
-type Request events.APIGatewayProxyRequest
 type OrderStatus int
 
 const (
@@ -33,10 +29,10 @@ type OrderRequest struct {
 // Returns status name
 func (status OrderStatus) String() (string, error) {
 	statuses := []string{
+		"Cancelled",
 		"Created",
 		"Confirmed",
 		"Delivered",
-		"Cancelled",
 	}
 	minStatus := Cancelled
 	maxStatus := Delivered
@@ -45,12 +41,4 @@ func (status OrderStatus) String() (string, error) {
 		return "Unknown", errors.New("Invalid order status")
 	}
 	return statuses[status], nil
-}
-
-// Generic Http error response
-func errorResponse(err error) Response {
-	return Response{
-		Body:       err.Error(),
-		StatusCode: 500,
-	}
 }

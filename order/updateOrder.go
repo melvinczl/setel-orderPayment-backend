@@ -6,11 +6,18 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/melvinczl/setel-orderPayment-backend/common"
 )
+
+type Response events.APIGatewayProxyResponse
+type Request events.APIGatewayProxyRequest
+type Order common.Order
+type OrderRequest common.OrderRequest
 
 var ddb *dynamodb.DynamoDB
 
@@ -27,7 +34,7 @@ func init() {
 	}
 }
 
-func Handler(ctx context.Context, request Request) (Response, error) {
+func Handler(ctx context.Context, request Request) (events.APIGatewayProxyResponse, error) {
 	fmt.Println("UpdateOrder")
 
 	var (
@@ -36,14 +43,14 @@ func Handler(ctx context.Context, request Request) (Response, error) {
 	)
 
 	if err := json.Unmarshal([]byte(request.Body), &req); err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
 	if err := updateOrder(id, req); err != nil {
-		return errorResponse(err), err
+		return common.ErrorResponse(err), err
 	}
 
-	return Response{
+	return events.APIGatewayProxyResponse{
 		Body:       request.Body,
 		StatusCode: 200,
 	}, nil
