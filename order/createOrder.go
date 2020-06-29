@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -12,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	sdklambda "github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/google/uuid"
 	"github.com/melvinczl/setel-orderPayment-backend/common"
 )
@@ -20,25 +23,35 @@ type Response events.APIGatewayProxyResponse
 type Request events.APIGatewayProxyRequest
 type Order common.Order
 type OrderRequest common.OrderRequest
+type OrderResponse common.OrderResponse
+type PaymentRequest common.PaymentRequest
+type PaymentResponse common.PaymentResponse
+type Payload common.Payload
 
 var ddb *dynamodb.DynamoDB
+var lambdaClient *sdklambda.Lambda
 
 func init() {
 	region := os.Getenv("AWS_REGION")
-
-	if session, err := session.NewSession(&aws.Config{
+	awsConfig := &aws.Config{
 		Region: &region,
+	}
+
+	if sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
 	}); err != nil {
 		msg := fmt.Sprintf("Failed to connect to AWS: %s", err.Error())
 		fmt.Println(msg)
 	} else {
-		ddb = dynamodb.New(session)
+		ddb = dynamodb.New(sess)
+		lambdaClient = common.GetLambdaClient(sess, awsConfig)
 	}
 }
 
 // Handler is our lambda handler invoked by the `lambda.Start` function call
 func Handler(ctx context.Context, request Request) (events.APIGatewayProxyResponse, error) {
-	fmt.Println("Received body: ", request.Body)
+	fmt.Printf("Received body: %s\n", request.Body)
 	var (
 		req OrderRequest
 		id  = uuid.New().String()
@@ -48,19 +61,29 @@ func Handler(ctx context.Context, request Request) (events.APIGatewayProxyRespon
 		return common.ErrorResponse(err), err
 	}
 
-	created, err := common.Created.String()
-	if err != nil {
+	status := common.Created.String()
+	if status == "Unknown" {
+		err := errors.New("Invalid order status")
 		return common.ErrorResponse(err), err
 	}
 
 	order := &Order{
 		Id:          id,
-		Status:      created,
+		Status:      status,
 		Description: req.Description,
 		Amount:      req.Amount,
 	}
 
 	if err := addOrder(order); err != nil {
+		return common.ErrorResponse(err), err
+	}
+
+	paymentStatus, err := makePayment(order)
+	if err != nil {
+		return common.ErrorResponse(err), err
+	}
+
+	if err := updateOrderStatus(paymentStatus, order); err != nil {
 		return common.ErrorResponse(err), err
 	}
 
@@ -92,6 +115,129 @@ func addOrder(order *Order) error {
 		return err
 	}
 
+	fmt.Println("Order created: " + order.Id)
+	return nil
+}
+
+func makePayment(order *Order) (string, error) {
+	var (
+		paymentFuncName = os.Getenv("PROC_PAYMENT_FUNCTION")
+		resp            Response
+		paymentResp     PaymentResponse
+	)
+
+	req := &PaymentRequest{
+		AuthDetails: "some auth data...",
+		OrderDetails: common.Order{
+			Id:          order.Id,
+			Status:      order.Status,
+			Description: order.Description,
+			Amount:      order.Amount,
+		},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	p := &Payload{
+		Body: string(body),
+	}
+
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Println("Invoking lambda: " + paymentFuncName)
+	fmt.Printf("payload: %s\n", string(payload))
+	result, err := lambdaClient.Invoke(&sdklambda.InvokeInput{
+		FunctionName: aws.String(paymentFuncName),
+		Payload:      payload,
+	})
+	if err != nil {
+		return "", err
+	}
+	fmt.Printf("Result: %s\n", string(result.Payload))
+
+	statusCode := int(*result.StatusCode)
+	if statusCode != 200 {
+		fmt.Println("Error in processPayment, StatusCode: " + strconv.Itoa(statusCode))
+	}
+
+	if err = json.Unmarshal(result.Payload, &resp); err != nil {
+		return "", err
+	}
+
+	if err = json.Unmarshal([]byte(resp.Body), &paymentResp); err != nil {
+		return "", err
+	}
+
+	fmt.Println("Payment status: " + paymentResp.Status)
+	return paymentResp.Status, nil
+}
+
+func updateOrderStatus(paymentStatus string, order *Order) error {
+	var (
+		updateOrderFunc = os.Getenv("UPDATE_ORDER_FUNCTION")
+		resp            Response
+		orderResp       OrderResponse
+		orderStatus     common.OrderStatus
+	)
+
+	switch paymentStatus {
+	case common.PaymentConfirmed.String():
+		orderStatus = common.Confirmed
+	case common.PaymentDeclined.String():
+		orderStatus = common.Cancelled
+	default:
+		orderStatus = common.Created
+	}
+
+	req := &OrderRequest{
+		Status:      orderStatus,
+		Description: order.Description,
+		Amount:      order.Amount,
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	pathparams := make(map[string]string)
+	pathparams["id"] = order.Id
+	payload, err := common.APIRequstPayload(body, pathparams)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Invoking lambda: " + updateOrderFunc)
+	fmt.Printf("payload: %v\n", string(payload))
+	result, err := lambdaClient.Invoke(&sdklambda.InvokeInput{
+		FunctionName: aws.String(updateOrderFunc),
+		Payload:      payload,
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Result: %v\n", string(result.Payload))
+
+	statusCode := int(*result.StatusCode)
+	if statusCode != 200 {
+		fmt.Println("Error in processPayment, StatusCode: " + strconv.Itoa(statusCode))
+	}
+
+	if err = json.Unmarshal(result.Payload, &resp); err != nil {
+		return err
+	}
+
+	if err = json.Unmarshal([]byte(resp.Body), &orderResp); err != nil {
+		return err
+	}
+
+	fmt.Printf("Order status: %s\n", orderResp.Status.String())
 	return nil
 }
 

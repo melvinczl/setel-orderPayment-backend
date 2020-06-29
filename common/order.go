@@ -4,6 +4,26 @@ import (
 	"errors"
 )
 
+type Order struct {
+	Id          string  `json:"id"`
+	Status      string  `json:"status,omitempty"`
+	Description string  `json:"description,omitempty"`
+	Amount      float64 `json:"amount,omitempty"`
+}
+
+type OrderRequest struct {
+	Status      OrderStatus `json:"status"`
+	Description string      `json:"description,omitempty"`
+	Amount      float64     `json:"amount,omitempty"`
+}
+
+type OrderResponse struct {
+	Id          string      `json:"id,omitempty"`
+	Status      OrderStatus `json:"status"`
+	Description string      `json:"description,omitempty"`
+	Amount      float64     `json:"amount,omitempty"`
+}
+
 type OrderStatus int
 
 const (
@@ -13,32 +33,32 @@ const (
 	Delivered OrderStatus = 3
 )
 
-type Order struct {
-	Id          string  `json:"id"`
-	Status      string  `json:"status,omitempty"`
-	Description string  `json:"description,omitempty"`
-	Amount      float64 `json:"amount,omitempty"`
-}
-
-type OrderRequest struct {
-	Status      OrderStatus `json:"status,omitempty"`
-	Description string      `json:"description,omitempty"`
-	Amount      float64     `json:"amount,omitempty"`
-}
-
-// Returns status name
-func (status OrderStatus) String() (string, error) {
-	statuses := []string{
+var (
+	statuses = []string{
 		"Cancelled",
 		"Created",
 		"Confirmed",
 		"Delivered",
 	}
+)
+
+// Returns status name
+func (status OrderStatus) String() string {
 	minStatus := Cancelled
 	maxStatus := Delivered
 
 	if status < minStatus || status > maxStatus {
-		return "Unknown", errors.New("Invalid order status")
+		return "Unknown"
 	}
-	return statuses[status], nil
+	return statuses[status]
+}
+
+// Returns order status value
+func GetOrderStatus(orderStatus string) (int, error) {
+	for status, v := range statuses {
+		if orderStatus == v {
+			return status, nil
+		}
+	}
+	return -1, errors.New("Invalid order status")
 }

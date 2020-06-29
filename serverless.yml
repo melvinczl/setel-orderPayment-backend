@@ -32,9 +32,20 @@ provider:
         - dynamodb:DeleteItem 
       Resource:
         - arn:aws:dynamodb:*:*:table/${self:custom.orderTableName}*
+        - arn:aws:dynamodb:*:*:table/${self:custom.paymentTableName}*
+    - Effect: "Allow"
+      Action:
+        - lambda:InvokeFunction
+      Resource:
+        - arn:aws:lambda:*:*:function:${self:custom.processPaymentFunc}*
+        - arn:aws:lambda:*:*:function:${self:custom.updateOrderFunc}*
 
   environment:
     ORDER_TABLE: ${self:custom.orderTableName}
+    PAYMENT_TABLE: ${self:custom.paymentTableName}
+    CREATE_ORDER_FUNCTION: ${self:custom.createOrderFunc}
+    PROC_PAYMENT_FUNCTION: ${self:custom.processPaymentFunc}
+    UPDATE_ORDER_FUNCTION: ${self:custom.updateOrderFunc}
 
 package:
   exclude:
@@ -49,6 +60,7 @@ functions:
       - http:
           path: order
           method: post
+          cors: true
   getOrder:
     handler: bin/getOrder
     events:
@@ -64,6 +76,12 @@ functions:
       - http:
           path: order/{id}
           method: patch
+  processPayment:
+    handler: bin/processPayment
+    events:
+      - http:
+          path: payment
+          method: post
   
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
@@ -102,16 +120,26 @@ functions:
 #            host: example.com
 #            path: /hello
 
-#    Define function environment variables here
-#    environment:
-#      variable2: value2
-
 resources:
   Resources:
     OrderTable:
       Type: AWS::DynamoDB::Table
       Properties:
         TableName: ${self:custom.orderTableName}
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+
+    PaymentTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.paymentTableName}
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
@@ -129,3 +157,7 @@ resources:
 
 custom:
   orderTableName: ${self:service}-${self:provider.stage}-order
+  paymentTableName: ${self:service}-${self:provider.stage}-payment
+  createOrderFunc: ${self:service}-${self:provider.stage}-createOrder
+  updateOrderFunc: ${self:service}-${self:provider.stage}-updateOrder
+  processPaymentFunc: ${self:service}-${self:provider.stage}-processPayment

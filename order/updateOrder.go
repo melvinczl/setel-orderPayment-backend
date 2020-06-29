@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -62,9 +63,9 @@ func updateOrder(orderId string, req OrderRequest) error {
 		status    = "status"
 	)
 
-	orderStatus, err := req.Status.String()
-	if err != nil {
-		return err
+	orderStatus := req.Status.String()
+	if orderStatus == "Unknown" {
+		return errors.New("Invalid order status")
 	}
 
 	input := &dynamodb.UpdateItemInput{
@@ -86,7 +87,7 @@ func updateOrder(orderId string, req OrderRequest) error {
 		ReturnValues:     aws.String("UPDATED_NEW"),
 	}
 
-	_, err = ddb.UpdateItem(input)
+	_, err := ddb.UpdateItem(input)
 	if err != nil {
 		return err
 	}
