@@ -6,6 +6,7 @@ build:
 	env GOOS=linux go build -ldflags="-s -w" -o bin/getOrder order/getOrder.go
 	env GOOS=linux go build -ldflags="-s -w" -o bin/updateOrder order/updateOrder.go
 	env GOOS=linux go build -ldflags="-s -w" -o bin/processPayment payment/processPayment.go
+	env GOOS=linux go build -ldflags="-s -w" -o bin/getPayment payment/getPayment.go
 
 clean:
 	rm -rf ./bin ./vendor Gopkg.lock

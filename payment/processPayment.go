@@ -15,6 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	sdklambda "github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/google/uuid"
 	"github.com/melvinczl/setel-orderPayment-backend/common"
 )
@@ -27,17 +28,23 @@ type PaymentRequest common.PaymentRequest
 type PaymentResponse common.PaymentResponse
 
 var ddb *dynamodb.DynamoDB
+var lambdaClient *sdklambda.Lambda
 
 func init() {
 	region := os.Getenv("AWS_REGION")
-
-	if session, err := session.NewSession(&aws.Config{
+	awsConfig := &aws.Config{
 		Region: &region,
+	}
+
+	if sess, err := session.NewSessionWithOptions(session.Options{
+		Config:            *awsConfig,
+		SharedConfigState: session.SharedConfigEnable,
 	}); err != nil {
 		msg := fmt.Sprintf("Failed to connect to AWS: %s", err.Error())
 		fmt.Println(msg)
 	} else {
-		ddb = dynamodb.New(session)
+		ddb = dynamodb.New(sess)
+		lambdaClient = common.GetLambdaClient(sess, awsConfig)
 	}
 }
 
@@ -79,6 +86,20 @@ func Handler(ctx context.Context, request Request) (events.APIGatewayProxyRespon
 
 	if err := addPayment(payment); err != nil {
 		return common.ErrorResponse(err), err
+	}
+
+	//Update order status if manually triggered from API endpoint
+	if req.ManualTrigger == true {
+		order := &common.Order{
+			Id:          req.OrderDetails.Id,
+			Description: req.OrderDetails.Description,
+			Amount:      req.OrderDetails.Amount,
+			Status:      req.OrderDetails.Status,
+		}
+
+		if err := common.UpdateOrderStatus(lambdaClient, status, order); err != nil {
+			return common.ErrorResponse(err), err
+		}
 	}
 
 	paymentResp := &PaymentResponse{

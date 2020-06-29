@@ -9,8 +9,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
 
-// type Response events.APIGatewayProxyResponse
-// type Request events.APIGatewayProxyRequest
+type Response events.APIGatewayProxyResponse
+type Request events.APIGatewayProxyRequest
+
 type Payload struct {
 	Body           string            `json:"body"`
 	PathParameters map[string]string `json:"pathParameters,omitempty"`

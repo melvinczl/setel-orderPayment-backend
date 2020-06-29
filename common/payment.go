@@ -15,8 +15,9 @@ type Payment struct {
 }
 
 type PaymentRequest struct {
-	AuthDetails  string `json:"authDetails,omitempty"` //mock auth info...
-	OrderDetails Order  `json:"orderDetails,omitempty"`
+	AuthDetails   string `json:"authDetails,omitempty"` //mock auth info...
+	OrderDetails  Order  `json:"orderDetails,omitempty"`
+	ManualTrigger bool   `json:"manualTrigger,omitempty"`
 }
 
 type PaymentResponse struct {
